@@ -1,4 +1,4 @@
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 enum Token {
     Literal(String),
     Op(String),
@@ -6,7 +6,6 @@ enum Token {
 
 fn tokenize(s: &str) -> Vec<Token> {
     let mut tokens = Vec::new();
-
     let mut chars = s.chars().peekable();
 
     while let Some(c) = chars.peek() {
@@ -37,10 +36,59 @@ fn tokenize(s: &str) -> Vec<Token> {
     tokens
 }
 
+#[derive(Debug, PartialEq)]
+enum ValOrExp {
+    Val(String),
+    Exp(Box<Node>),
+    Empty,
+}
+
+#[derive(Debug, PartialEq)]
+struct Node {
+    op: String,
+    left: ValOrExp,
+    right: ValOrExp,
+}
+
+fn ast(tokens: &[Token]) -> ValOrExp {
+    let parse_tokens_as_exp = |op_idx: usize| {
+        let Token::Op(op) = tokens[op_idx].clone() else { unreachable!(); };
+
+        ValOrExp::Exp(
+            Box::new(
+                Node {
+                    op,
+                    left: ast(&tokens[..op_idx]),
+                    right: ast(&tokens[op_idx + 1..]),
+                }
+            )
+        )
+    };
+
+    let parse_tokens_as_val = || {
+        match tokens.len() {
+            0 => return ValOrExp::Empty,
+            1 => return {
+                let Token::Literal(num) = tokens[0].clone() else { unreachable!(); };
+                ValOrExp::Val(num)
+            },
+            _ => panic!("This list of tokens does not contain a single operator, those it should only contain a single token (or noting) but found {tokens:?}"),
+        }
+    };
+
+    let is_op = |t: &Token| if let Token::Op(_) = t { true } else { false };
+    match tokens.iter().position(is_op) {
+        Some(op_idx) => parse_tokens_as_exp(op_idx),
+        None => parse_tokens_as_val(),
+    }
+}
+
 fn main() {
-    let s = "123 ** 456";
+    let s = "2 * 2 + 2";
     let tokens = tokenize(s);
     println!("{:?}", tokens);
+    let ast = ast(&tokens);
+    println!("{:#?}", ast);
 }
 
 #[test]
