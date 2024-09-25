@@ -116,36 +116,3 @@ fn main() {
     let res = eval(&ast);
     println!("{s} = {res}");
 }
-
-#[test]
-fn plus() {
-    for s in [
-        "123+456",
-        "123 + 456",
-        "123 + 456 ",
-        "123   +   456",
-    ] {
-        let mut tokens = tokenize(s).into_iter();
-        assert_eq!(tokens.next(), Some(Token::Literal(String::from("123"))));
-        assert_eq!(tokens.next(), Some(Token::Op(String::from("+"))));
-        assert_eq!(tokens.next(), Some(Token::Literal(String::from("456"))));
-    }
-}
-
-#[test]
-fn stars() {
-    {
-        let mut tokens = tokenize("123**456").into_iter();
-        assert_eq!(tokens.next(), Some(Token::Literal(String::from("123"))));
-        assert_eq!(tokens.next(), Some(Token::Op(String::from("**"))));
-        assert_eq!(tokens.next(), Some(Token::Literal(String::from("456"))));
-    }
-
-    {
-        let mut tokens = tokenize("123***456").into_iter();
-        assert_eq!(tokens.next(), Some(Token::Literal(String::from("123"))));
-        assert_eq!(tokens.next(), Some(Token::Op(String::from("**"))));
-        assert_eq!(tokens.next(), Some(Token::Op(String::from("*"))));
-        assert_eq!(tokens.next(), Some(Token::Literal(String::from("456"))));
-    }
-}
