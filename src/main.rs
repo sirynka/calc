@@ -43,6 +43,16 @@ enum ValOrExp {
     Empty,
 }
 
+impl std::fmt::Display for ValOrExp {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            ValOrExp::Empty => write!(f, "0"),
+            ValOrExp::Val(num) => write!(f, "{num}"),
+            ValOrExp::Exp(node) => write!(f, "({} {} {})", node.left, node.op, node.right),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 struct Node {
     op: String,
@@ -97,7 +107,7 @@ fn ast(tokens: &[Token]) -> ValOrExp {
     };
 
     let closed_paren_idx = || {
-        if tokens[0] == Token::OpenParen {
+        if tokens.first() == Some(&Token::OpenParen) {
             let mut count = 0;
             for (i, token) in tokens.iter().enumerate() {
                 match token {
@@ -147,11 +157,10 @@ fn eval(node: &ValOrExp) -> i64 {
 }
 
 fn main() {
-    let s = "(1+2)*(3+4)";
+    let s = "(1+2) * (3+4)";
     let tokens = tokenize(s);
-    println!("{:?}", tokens);
     let ast = ast(&tokens);
-    println!("{:#?}", ast);
     let res = eval(&ast);
-    println!("{s} = {res}");
+    println!("{:?}", tokens);
+    println!("{ast} = {res}");
 }
