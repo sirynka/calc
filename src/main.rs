@@ -15,7 +15,7 @@ fn tokenize(s: &str) -> Vec<Token> {
                 while let Some(c) = chars.next_if(|c| c.is_digit(10)) { token.push(c); }
                 tokens.push(Token::Literal(token));
             }
-            '+' | '-' | '/' => {
+            '+' | '-' | '/' | '%' => {
                 if let Some(c) = chars.next() {
                     tokens.push(Token::Op(c.to_string()));
                 }
@@ -83,12 +83,38 @@ fn ast(tokens: &[Token]) -> ValOrExp {
     }
 }
 
+fn pow(base: i64, exp: i64) -> i64 {
+    let mut res = 1;
+    for _ in 0..exp { res *= base; }
+    res
+}
+
+fn eval(node: &ValOrExp) -> i64 {
+    match node {
+        ValOrExp::Empty => 0,
+        ValOrExp::Val(num) => num.parse().unwrap(),
+        ValOrExp::Exp(node) => {
+            match node.op.as_str() {
+                "+" => eval(&node.left) + eval(&node.right),
+                "-" => eval(&node.left) - eval(&node.right),
+                "*" => eval(&node.left) * eval(&node.right),
+                "/" => eval(&node.left) / eval(&node.right),
+                "%" => eval(&node.left) % eval(&node.right),
+                "**" => pow(eval(&node.left), eval(&node.right)),
+                _ => panic!("Unknown operator({})", node.op),
+            }
+        }
+    }
+}
+
 fn main() {
-    let s = "2 * 2 + 2";
+    let s = "2 + 2 * 2";
     let tokens = tokenize(s);
     println!("{:?}", tokens);
     let ast = ast(&tokens);
     println!("{:#?}", ast);
+    let res = eval(&ast);
+    println!("{s} = {res}");
 }
 
 #[test]
