@@ -1,6 +1,9 @@
+type Stack<'a> = std::collections::HashMap<&'a str, i64>;
+
 #[derive(Debug, PartialEq, Clone)]
 enum Token {
     Literal(String),
+    Variable(String),
     Op(String),
     OpenParen,
     ClosedParen
@@ -12,6 +15,11 @@ fn tokenize(s: &str) -> Vec<Token> {
 
     while let Some(c) = chars.peek() {
         match c {
+            'a'..='z' => {
+                let mut token = String::new();
+                while let Some(c) = chars.next_if(|c| c.is_alphabetic() || c.is_digit(10)) { token.push(c); }
+                tokens.push(Token::Variable(token));
+            }
             '0'..='9' => {
                 let mut token = String::new();
                 while let Some(c) = chars.next_if(|c| c.is_digit(10)) { token.push(c); }
@@ -38,6 +46,7 @@ fn tokenize(s: &str) -> Vec<Token> {
 
 #[derive(Debug, PartialEq)]
 enum ValOrExp {
+    Var(String),
     Val(String),
     Exp(Box<Node>),
     Empty,
@@ -47,6 +56,7 @@ impl std::fmt::Display for ValOrExp {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             ValOrExp::Empty => write!(f, "0"),
+            ValOrExp::Var(var) => write!(f, "{var}"),
             ValOrExp::Val(num) => write!(f, "{num}"),
             ValOrExp::Exp(node) => write!(f, "({} {} {})", node.left, node.op, node.right),
         }
@@ -93,8 +103,11 @@ fn ast(tokens: &[Token]) -> ValOrExp {
         match tokens.len() {
             0 => return ValOrExp::Empty,
             1 => return {
-                let Token::Literal(num) = tokens[0].clone() else { unreachable!(); };
-                ValOrExp::Val(num)
+                match &tokens[0] {
+                    Token::Literal(num) => ValOrExp::Val(num.clone()),
+                    Token::Variable(var) => ValOrExp::Var(var.clone()),
+                    _ => unreachable!(),
+                }
             },
             _ => {
                 if wrapped_in_parens(tokens) { return ast(strip_parens(tokens)); }
@@ -143,29 +156,104 @@ fn pow(base: i64, exp: i64) -> i64 {
     res
 }
 
-fn eval(node: &ValOrExp) -> i64 {
+fn eval(node: &ValOrExp, stack: &Stack) -> i64 {
     match node {
         ValOrExp::Empty => 0,
         ValOrExp::Val(num) => num.parse().unwrap(),
         ValOrExp::Exp(node) => {
             match node.op.as_str() {
-                "+" => eval(&node.left) + eval(&node.right),
-                "-" => eval(&node.left) - eval(&node.right),
-                "*" => eval(&node.left) * eval(&node.right),
-                "/" => eval(&node.left) / eval(&node.right),
-                "%" => eval(&node.left) % eval(&node.right),
-                "**" => pow(eval(&node.left), eval(&node.right)),
+                "+" => eval(&node.left, stack) + eval(&node.right, stack),
+                "-" => eval(&node.left, stack) - eval(&node.right, stack),
+                "*" => eval(&node.left, stack) * eval(&node.right, stack),
+                "/" => eval(&node.left, stack) / eval(&node.right, stack),
+                "%" => eval(&node.left, stack) % eval(&node.right, stack),
+                "**" => pow(eval(&node.left, stack), eval(&node.right, stack)),
                 _ => panic!("Unknown operator({})", node.op),
+            }
+        }
+        ValOrExp::Var(var) => {
+            match stack.get(var.as_str()) {
+                Some(value) => *value,
+                None => panic!("Var({var}) was not on a Stack\n{stack:?}"),
+            }
+        }
+    }
+}
+
+fn execute(program: &str) {
+    let mut stack = Stack::new();
+
+    let exec_exp = |exp: &str, stack: &Stack| -> i64 {
+        let tokens = tokenize(exp);
+        let ast = ast(&tokens);
+        let value = eval(&ast, &stack);
+        value
+    };
+
+    fn skip_empty(line: &str) -> Option<&str> {
+        let line = line.trim();
+        if line.is_empty() { None } else { Some(line) }
+    }
+
+    for line in program.lines().filter_map(skip_empty) {
+        match line.split_once("=") {
+            Some((var, exp)) => {
+                let value = exec_exp(exp, &stack);
+                stack.insert(var.trim(), value);
+            }
+            None => {
+                let value = exec_exp(line, &stack);
+                println!("{}", value);
             }
         }
     }
 }
 
 fn main() {
-    let s = "(1+2) * (3+4) + (5*6)";
-    let tokens = tokenize(s);
-    let ast = ast(&tokens);
-    let res = eval(&ast);
-    println!("{:?}", tokens);
-    println!("{ast} = {res}");
+    let program = "
+        a = 1
+        b = 1
+
+        a
+        tmp = a + b
+        a = b
+        b = tmp
+
+        a
+        tmp = a + b
+        a = b
+        b = tmp
+
+        a
+        tmp = a + b
+        a = b
+        b = tmp
+
+        a
+        tmp = a + b
+        a = b
+        b = tmp
+
+        a
+        tmp = a + b
+        a = b
+        b = tmp
+
+        a
+        tmp = a + b
+        a = b
+        b = tmp
+
+        a
+        tmp = a + b
+        a = b
+        b = tmp
+
+        a
+        tmp = a + b
+        a = b
+        b = tmp
+    ";
+
+    execute(program);
 }
