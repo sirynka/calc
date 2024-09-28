@@ -61,6 +61,8 @@ struct Node {
 }
 
 fn ast(tokens: &[Token]) -> ValOrExp {
+    let op_precedence = ["-", "+", "*", "/", "%", "**"];
+
     let wrapped_in_parens = |tokens: &[Token]| -> bool {
         tokens.len() > 2 && tokens[0] == Token::OpenParen && tokens[tokens.len() - 1] == Token::ClosedParen
     };
@@ -106,28 +108,31 @@ fn ast(tokens: &[Token]) -> ValOrExp {
         }
     };
 
-    let closed_paren_idx = || {
-        if tokens.first() == Some(&Token::OpenParen) {
-            let mut count = 0;
-            for (i, token) in tokens.iter().enumerate() {
-                match token {
-                    Token::OpenParen => count += 1,
-                    Token::ClosedParen => count -= 1,
-                    _ => {}
-                }
-                if count == 0 { return i; }
+    let find_posible_splits = |tokens: &[Token]| -> Vec<usize> {
+        let mut count = 0;
+        let mut splits = Vec::new();
+        for (i, token) in tokens.iter().enumerate() {
+            match token {
+                Token::OpenParen => count += 1,
+                Token::ClosedParen => count -= 1,
+                Token::Op(_) => if count == 0 { splits.push(i); },
+                _ => {}
             }
         }
-
-        0
+        splits
     };
 
-    let skip = closed_paren_idx();
-    let is_op = |t: &Token| if let Token::Op(_) = t { true } else { false };
-    let op_pos = tokens.iter().skip(skip).position(is_op);
+    let pick_split = |splits: &[usize]| -> Option<usize> {
+        splits.iter()
+            .filter_map(|&i| if let Token::Op(op) = &tokens[i] { Some((i, op)) } else { None })
+            .min_by_key(|&(_, op)| op_precedence.iter().position(|&p| p == op))
+            .map(|(i, _)| i)
+    };
 
-    match op_pos {
-        Some(op_idx) => parse_tokens_as_exp(op_idx + skip),
+    let possible_splits = find_posible_splits(tokens);
+    let split_pos = pick_split(&possible_splits);
+    match split_pos {
+        Some(op_idx) => parse_tokens_as_exp(op_idx),
         None => parse_tokens_as_val(),
     }
 }
@@ -157,7 +162,7 @@ fn eval(node: &ValOrExp) -> i64 {
 }
 
 fn main() {
-    let s = "(1+2) * (3+4)";
+    let s = "(1+2) * (3+4) + (5*6)";
     let tokens = tokenize(s);
     let ast = ast(&tokens);
     let res = eval(&ast);
