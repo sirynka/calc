@@ -45,14 +45,6 @@ fn tokenize(s: &str) -> Vec<Token> {
         }
     }
 
-    if tokens.first() != Some(&Token::EndOfLine) {
-        tokens.insert(0, Token::EndOfLine);
-    }
-
-    if tokens.last() != Some(&Token::EndOfLine) {
-        tokens.push(Token::EndOfLine);
-    }
-
     tokens
 }
 
@@ -196,7 +188,7 @@ fn parse_exp(tokens: &[Token]) -> ExpressionLike {
 
 fn parse_stmt(tokens: &[Token]) -> Statement {
     if tokens[1] != Token::Equal {
-        panic!("{}\n{}",
+        panic!("\n{}\n{}\n",
             "Statements can not contain anything but '=' as tok[1]",
             format!("Found {tokens:?}")
         );
@@ -218,15 +210,34 @@ fn parse_lines(tokens: &[Token]) -> AST {
         if let Token::EndOfLine = token { eol_pos.push(i); }
     }
 
+    let parse_line = |b: usize, e: usize| -> Option<Line> {
+        if b == e { return None; }
+        let line = &tokens[b..e];
+        match line.contains(&Token::Equal) {
+            true => Some(Line::Statement(parse_stmt(line))),
+            false => Some(Line::Expression(parse_exp(line))),
+        }
+    };
+
     let mut lines: Vec<Line> = Vec::new();
+
+    if let Some(p) = eol_pos.first() {
+        if let Some(line) = parse_line(0, *p) {
+            lines.push(line);
+        }
+    }
+
     for w in eol_pos.windows(2) {
         if let [b, e] = w {
-            let line = &tokens[*b+1..*e];
-            if line.is_empty() { continue; }
-            match line.contains(&Token::Equal) {
-                true => lines.push(Line::Statement(parse_stmt(line))),
-                false => lines.push(Line::Expression(parse_exp(line))),
+            if let Some(line) = parse_line(*b + 1, *e) {
+                lines.push(line);
             }
+        }
+    }
+
+    if let Some(p) = eol_pos.last() {
+        if let Some(line) = parse_line(*p + 1, tokens.len()) {
+            lines.push(line);
         }
     }
 
@@ -296,10 +307,12 @@ fn main() {
     tmp = a + b; a = b; b = tmp; a
     tmp = a + b; a = b; b = tmp; a
     ";
+
+    // let program = "1; 2; 3";
+
     let tokens = tokenize(&program);
     let ast = parse_lines(&tokens);
     // println!("{tokens:?}");
     // println!("{ast}");
-
     exec(&ast);
 }
