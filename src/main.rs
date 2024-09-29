@@ -284,48 +284,18 @@ fn main() {
     let program = "
     a = 1
     b = 1
-
     a
-    tmp = a + b
-    a = b
-    b = tmp
 
-    a
-    tmp = a + b
-    a = b
-    b = tmp
-
-    a
-    tmp = a + b
-    a = b
-    b = tmp
-
-    a
-    tmp = a + b
-    a = b
-    b = tmp
-
-    a
-    tmp = a + b
-    a = b
-    b = tmp
-
-    a
-    tmp = a + b
-    a = b
-    b = tmp
-
-    a
-    tmp = a + b
-    a = b
-    b = tmp
-
-    a
-    tmp = a + b
-    a = b
-    b = tmp
+    tmp = a + b; a = b; b = tmp; a
+    tmp = a + b; a = b; b = tmp; a
+    tmp = a + b; a = b; b = tmp; a
+    tmp = a + b; a = b; b = tmp; a
+    tmp = a + b; a = b; b = tmp; a
+    tmp = a + b; a = b; b = tmp; a
+    tmp = a + b; a = b; b = tmp; a
+    tmp = a + b; a = b; b = tmp; a
+    tmp = a + b; a = b; b = tmp; a
     ";
-
     let tokens = tokenize(&program);
     let ast = parse_lines(&tokens);
     // println!("{tokens:?}");
