@@ -12,6 +12,8 @@ pub enum Token {
     Equal,
     EndOfLine,
     Repeat,
+    If,
+    While,
 }
 
 pub enum AST {
@@ -34,6 +36,8 @@ pub enum Line {
 #[derive(Debug)]
 pub enum Keyword {
     Repeat(Repeat),
+    While(While),
+    If(If),
 }
 
 #[derive(Debug, PartialEq)]
@@ -59,6 +63,18 @@ pub struct Statement {
 #[derive(Debug)]
 pub struct Repeat {
     pub count: ExpressionLike,
+    pub scope: Scope,
+}
+
+#[derive(Debug)]
+pub struct If {
+    pub condition: ExpressionLike,
+    pub scope: Scope,
+}
+
+#[derive(Debug)]
+pub struct While {
+    pub condition: ExpressionLike,
     pub scope: Scope,
 }
 

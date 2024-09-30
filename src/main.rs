@@ -10,14 +10,12 @@ use code::{
 
 fn main() {
     let program = "
-    a = 1
-    b = 1
-
-    repeat(10) {
-        a
-        tmp = a + b
-        a = b
-        b = tmp
+    a = 10
+    while (a) {
+        a = a - 1
+        if (a % 2) {
+            a
+        }
     }
     ";
 

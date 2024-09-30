@@ -8,8 +8,10 @@ use crate::data::{
     Scope,
     Stack,
     Token,
+    While,
     Line,
     AST,
+    If,
 };
 
 pub fn tokenize(s: &str) -> Vec<Token> {
@@ -23,6 +25,8 @@ pub fn tokenize(s: &str) -> Vec<Token> {
                 while let Some(c) = chars.next_if(|c| c.is_alphabetic() || c.is_digit(10)) { token.push(c); }
                 tokens.push(match token.as_str() {
                     "repeat" => Token::Repeat,
+                    "while" => Token::While,
+                    "if" => Token::If,
                     _ => Token::Variable(token),
                 });
             }
@@ -189,19 +193,19 @@ fn parse_stmt(tokens: &[Token]) -> Statement {
 }
 
 fn parse_kwrd(tokens: &[Token]) -> Keyword {
-    let parse_repeat = || -> Repeat {
+    let parse_keyword_template = |keyword| -> (ExpressionLike, Scope) {
         let msg = format!("\n{}{}{}\n",
-            "Encountered unexpected token when parsing `repeat`\n",
-            "Usage: repeat(<expression>) { <scope> }\n",
+            format!("Encountered unexpected token when parsing `{keyword}`\n"),
+            format!("Usage: {keyword} (<expression>) {{ <scope> }}\n"),
             format!("Found {tokens:?}")
         );
 
         let tokens = &tokens[1..];
         let closing_paren = find_closing(tokens, Token::OpenParen, Token::ClosedParen);
 
-        let count_tokens = &tokens[..=closing_paren];
-        let count = match wrapped_in_parens(count_tokens) {
-            true => parse_exp(strip_parens(count_tokens)),
+        let condition_tokens = &tokens[..=closing_paren];
+        let condition = match wrapped_in_parens(condition_tokens) {
+            true => parse_exp(strip_parens(condition_tokens)),
             false => panic!("{msg}"),
         };
 
@@ -211,11 +215,28 @@ fn parse_kwrd(tokens: &[Token]) -> Keyword {
             false => panic!("{msg}"),
         };
 
+        (condition, scope)
+    };
+
+    let parse_repeat = || -> Repeat {
+        let (count, scope) = parse_keyword_template("repeat");
         Repeat { count, scope }
+    };
+
+    let parse_while = || -> While {
+        let (condition, scope) = parse_keyword_template("while");
+        While { condition, scope }
+    };
+
+    let parse_if = || -> If {
+        let (condition, scope) = parse_keyword_template("if");
+        If { condition, scope }
     };
 
     match &tokens[0] {
         Token::Repeat => Keyword::Repeat(parse_repeat()),
+        Token::While => Keyword::While(parse_while()),
+        Token::If => Keyword::If(parse_if()),
         other => panic!("Unknown keyword({other:?})"),
     }
 }
@@ -240,7 +261,11 @@ fn parse_scope(tokens: &[Token]) -> Scope {
         }
 
         match tokens.first() {
-            Some(Token::Repeat) => return Some(EolSeparated::Keyword(parse_kwrd(tokens))),
+            Some(
+                Token::Repeat |
+                Token::While |
+                Token::If
+            ) => return Some(EolSeparated::Keyword(parse_kwrd(tokens))),
             _ => if let Some(line) = parse_line(tokens) {
                 return Some(EolSeparated::Line(line));
             },
@@ -251,6 +276,12 @@ fn parse_scope(tokens: &[Token]) -> Scope {
     let mut scope: Vec<EolSeparated> = Vec::new();
     let line_endings = find_posible_splits(tokens);
     let zipped_line_endings = line_endings.windows(2);
+
+    if line_endings.is_empty() {
+        if let Some(line) = parse_eol_separated(tokens) {
+            scope.push(line);
+        }
+    }
 
     if let Some(p) = line_endings.first() {
         if let Some(line) = parse_eol_separated(&tokens[..*p]) {
@@ -314,6 +345,16 @@ pub fn exec(ast: &AST) {
             Keyword::Repeat(repeat) => {
                 for _ in 0..exec_expr(&repeat.count, stack) {
                     exec_scope(&repeat.scope, stack);
+                }
+            }
+            Keyword::While(whhile) => {
+                while exec_expr(&whhile.condition, stack) != 0 {
+                    exec_scope(&whhile.scope, stack);
+                }
+            }
+            Keyword::If(iff) => {
+                if exec_expr(&iff.condition, stack) != 0 {
+                    exec_scope(&iff.scope, stack);
                 }
             }
         }

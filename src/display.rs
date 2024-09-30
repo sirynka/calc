@@ -28,15 +28,18 @@ impl std::fmt::Display for Line {
 }
 
 fn write_keyword(f: &mut std::fmt::Formatter, keyword: &Keyword, indent: usize) -> std::fmt::Result {
-    let spaces = SPACES.repeat(indent);
+    let write_keyword_template = |f: &mut std::fmt::Formatter, keyword: &str, expr: &ExpressionLike, scope: &Scope| -> std::fmt::Result {
+        let spaces = SPACES.repeat(indent);
+        write!(f, "{spaces}{keyword} ({expr}) {{\n")?;
+        write_scope(f, scope, indent + 1)?;
+        writeln!(f, "{spaces}}}")
+    };
+
     match keyword {
-        Keyword::Repeat(repeat) => {
-            writeln!(f, "{spaces}repeat({}) {{", repeat.count)?;
-            write_scope(f, &repeat.scope, indent + 1)?;
-            writeln!(f, "{spaces}}}")?;
-        }
+        Keyword::Repeat(repeat) => write_keyword_template(f, "repeat", &repeat.count, &repeat.scope),
+        Keyword::While(whhile) => write_keyword_template(f, "while", &whhile.condition, &whhile.scope),
+        Keyword::If(iff) => write_keyword_template(f, "if", &iff.condition, &iff.scope),
     }
-    Ok(())
 }
 
 fn write_scope(f: &mut std::fmt::Formatter, scope: &Scope, indent: usize) -> std::fmt::Result {
