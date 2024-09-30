@@ -11,6 +11,7 @@ pub enum Token {
     ClosedCurly,
     Equal,
     EndOfLine,
+    Repeat,
 }
 
 pub enum AST {
@@ -18,15 +19,21 @@ pub enum AST {
 }
 
 #[derive(Debug)]
-pub enum LineOrScope {
+pub enum EolSeparated {
     Line(Line),
     Scope(Scope),
+    Keyword(Keyword),
 }
 
 #[derive(Debug)]
 pub enum Line {
     Statement(Statement),
     Expression(ExpressionLike),
+}
+
+#[derive(Debug)]
+pub enum Keyword {
+    Repeat(Repeat),
 }
 
 #[derive(Debug, PartialEq)]
@@ -51,7 +58,13 @@ pub struct Statement {
 }
 
 #[derive(Debug)]
+pub struct Repeat {
+    pub count: ExpressionLike,
+    pub scope: Scope,
+}
+
+#[derive(Debug)]
 pub struct Scope {
-    pub inner: Vec<LineOrScope>,
+    pub inner: Vec<EolSeparated>,
 }
 

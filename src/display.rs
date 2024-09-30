@@ -1,11 +1,13 @@
 use crate::data::{
     ExpressionLike,
-    LineOrScope,
+    EolSeparated,
+    Keyword,
     Scope,
     Line,
     AST,
 };
 
+const SPACES: &str = "    ";
 impl std::fmt::Display for ExpressionLike {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
@@ -26,43 +28,33 @@ impl std::fmt::Display for Line {
     }
 }
 
-impl std::fmt::Display for Scope {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        writeln!(f, "{{")?;
-        for inner in &self.inner {
-            write_with_indent(f, inner, 1)?;
+fn write_keyword(f: &mut std::fmt::Formatter, keyword: &Keyword, indent: usize) -> std::fmt::Result {
+    let spaces = SPACES.repeat(indent);
+    match keyword {
+        Keyword::Repeat(repeat) => {
+            writeln!(f, "{spaces}repeat({}) {{", repeat.count)?;
+            write_scope(f, &repeat.scope, indent + 1)?;
+            writeln!(f, "{spaces}}}")?;
         }
-        writeln!(f, "}}")
     }
+    Ok(())
 }
 
-fn write_with_indent(f: &mut std::fmt::Formatter, line_or_scope: &LineOrScope, indent: usize) -> std::fmt::Result {
-    let spaces = "    ".repeat(indent);
-    match line_or_scope {
-        LineOrScope::Line(line) => writeln!(f, "{spaces}{line}"),
-        LineOrScope::Scope(scope) => {
-            writeln!(f, "{spaces}{{")?;
-            for line_or_scope in &scope.inner {
-                write_with_indent(f, line_or_scope, indent + 1)?;
-            }
-            writeln!(f, "{spaces}}}")
+fn write_scope(f: &mut std::fmt::Formatter, scope: &Scope, indent: usize) -> std::fmt::Result {
+    let spaces = SPACES.repeat(indent);
+    for inner in &scope.inner {
+        match inner {
+            EolSeparated::Line(line) => writeln!(f, "{spaces}{line}")?,
+            EolSeparated::Scope(scope) => write_scope(f, scope, indent + 1)?,
+            EolSeparated::Keyword(keyword) => write_keyword(f, keyword, indent)?,
         }
     }
-}
-
-impl std::fmt::Display for LineOrScope {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            LineOrScope::Line(line) => write!(f, "{line}"),
-            LineOrScope::Scope(scope) => write!(f, "{scope}"),
-        }
-    }
+    Ok(())
 }
 
 impl std::fmt::Display for AST {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let AST::Scope(scope) = self;
-        write!(f, "{scope}")
+        write_scope(f, scope, 0)
     }
 }
-

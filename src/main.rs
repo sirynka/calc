@@ -8,16 +8,13 @@ fn main() {
     let program = "
     a = 1
     b = 1
-    a
 
-    { tmp = a + b; a = b; b = tmp; a; }
-    { tmp = a + b; a = b; b = tmp; a; }
-    { tmp = a + b; a = b; b = tmp; a; }
-    { tmp = a + b; a = b; b = tmp; a; }
-    { tmp = a + b; a = b; b = tmp; a; }
-    { tmp = a + b; a = b; b = tmp; a; }
-    { tmp = a + b; a = b; b = tmp; a; }
-    { tmp = a + b; a = b; b = tmp; a; }
+    repeat(10) {
+        a
+        tmp = a + b
+        a = b
+        b = tmp
+    }
     ";
 
     let tokens = tokenize(&program);

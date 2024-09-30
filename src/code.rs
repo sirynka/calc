@@ -1,8 +1,10 @@
 use crate::data::{
     ExpressionLike,
-    LineOrScope,
+    EolSeparated,
     Statement,
     BinaryOp,
+    Keyword,
+    Repeat,
     Scope,
     Stack,
     Token,
@@ -19,7 +21,10 @@ pub fn tokenize(s: &str) -> Vec<Token> {
             'a'..='z' => {
                 let mut token = String::new();
                 while let Some(c) = chars.next_if(|c| c.is_alphabetic() || c.is_digit(10)) { token.push(c); }
-                tokens.push(Token::Variable(token));
+                tokens.push(match token.as_str() {
+                    "repeat" => Token::Repeat,
+                    _ => Token::Variable(token),
+                });
             }
             '0'..='9' => {
                 let mut token = String::new();
@@ -53,6 +58,14 @@ fn wrapped_in(tokens: &[Token], open: Token, close: Token) -> bool {
     tokens.len() > 2 && tokens[0] == open && tokens[tokens.len() - 1] == close
 }
 
+fn wrapped_in_parens(tokens: &[Token]) -> bool {
+    wrapped_in(tokens, Token::OpenParen, Token::ClosedParen)
+}
+
+fn wrapped_in_curlys(tokens: &[Token]) -> bool {
+    wrapped_in(tokens, Token::OpenCurly, Token::ClosedCurly)
+}
+
 fn strip_wrapping(tokens: &[Token], open: Token, close: Token) -> &[Token] {
     let mut tokens = tokens;
     while let (Some(_), Some(_)) = (
@@ -62,6 +75,14 @@ fn strip_wrapping(tokens: &[Token], open: Token, close: Token) -> &[Token] {
         tokens = &tokens[1..tokens.len() - 1];
     }
     tokens
+}
+
+fn strip_parens(tokens: &[Token]) -> &[Token] {
+    strip_wrapping(tokens, Token::OpenParen, Token::ClosedParen)
+}
+
+fn strip_curlys(tokens: &[Token]) -> &[Token] {
+    strip_wrapping(tokens, Token::OpenCurly, Token::ClosedCurly)
 }
 
 fn find_splits(tokens: &[Token], open: Token, close: Token, f: fn(&Token) -> bool) -> Vec<usize> {
@@ -78,16 +99,22 @@ fn find_splits(tokens: &[Token], open: Token, close: Token, f: fn(&Token) -> boo
     splits
 }
 
+fn find_closing(tokens: &[Token], open: Token, close: Token) -> usize {
+    let mut count = 0;
+    for (i, token) in tokens.iter().enumerate() {
+        match token {
+            o if *o == open => count += 1,
+            c if *c == close => count -= 1,
+            _ => {}
+        }
+        if count == 0 { return i; }
+    }
+
+    panic!("Failed to find closing paren in {tokens:?}")
+}
+
 fn parse_exp(tokens: &[Token]) -> ExpressionLike {
     let op_precedence = ["-", "+", "*", "/", "%", "**"];
-
-    let wrapped_in_parens = |tokens: &[Token]| -> bool {
-        wrapped_in(tokens, Token::OpenParen, Token::ClosedParen)
-    };
-
-    fn strip_parens(tokens: &[Token]) -> &[Token] {
-        strip_wrapping(tokens, Token::OpenParen, Token::ClosedParen)
-    }
 
     let parse_as_exp = |op_idx: usize| {
         let Token::Op(op) = tokens[op_idx].clone() else { unreachable!(); };
@@ -162,58 +189,86 @@ fn parse_stmt(tokens: &[Token]) -> Statement {
     }
 }
 
-fn parse_scope(tokens: &[Token]) -> Scope {
+fn parse_kwrd(tokens: &[Token]) -> Keyword {
+    let parse_repeat = || -> Repeat {
+        let msg = format!("\n{}\n{}\n{}\n",
+            "Encountered unexpected token when parsing `repeat`",
+            "Usage: repeat(<expression>) { <scope> }",
+            format!("Found {tokens:?}")
+        );
 
+        let tokens = &tokens[1..];
+        let closing_paren = find_closing(tokens, Token::OpenParen, Token::ClosedParen);
+
+        let count_tokens = &tokens[..=closing_paren];
+        let count = match wrapped_in_parens(count_tokens) {
+            true => parse_exp(strip_parens(count_tokens)),
+            false => panic!("{msg}"),
+        };
+
+        let scope_tokens = &tokens[closing_paren + 1..];
+        let scope = match wrapped_in_curlys(scope_tokens) {
+            true => parse_scope(strip_curlys(scope_tokens)),
+            false => panic!("{msg}"),
+        };
+
+        Repeat { count, scope }
+    };
+
+    match &tokens[0] {
+        Token::Repeat => Keyword::Repeat(parse_repeat()),
+        other => panic!("Unknown keyword({other:?})"),
+    }
+}
+
+fn parse_scope(tokens: &[Token]) -> Scope {
     let find_posible_splits = |tokens: &[Token]| -> Vec<usize> {
         find_splits(tokens, Token::OpenCurly, Token::ClosedCurly, |tok| tok == &Token::EndOfLine)
     };
 
-    let wrapped_in_curlys = |tokens: &[Token]| -> bool {
-        wrapped_in(tokens, Token::OpenCurly, Token::ClosedCurly)
-    };
-
-    fn strip_curlys(tokens: &[Token]) -> &[Token] {
-        strip_wrapping(tokens, Token::OpenCurly, Token::ClosedCurly)
-    }
-
     let parse_line = |line: &[Token]| -> Option<Line> {
         if line.is_empty() { return None; }
+
         match line.contains(&Token::Equal) {
             true => Some(Line::Statement(parse_stmt(line))),
             false => Some(Line::Expression(parse_exp(line))),
         }
     };
 
-    let parse_line_or_scope = |tokens: &[Token]| -> Option<LineOrScope> {
-        match wrapped_in_curlys(tokens) {
-            true => return Some(LineOrScope::Scope(parse_scope(strip_curlys(tokens)))),
-            false => if let Some(line) = parse_line(tokens) {
-                return Some(LineOrScope::Line(line));
-            },
+    let parse_eol_separated = |tokens: &[Token]| -> Option<EolSeparated> {
+        if wrapped_in_curlys(tokens) {
+            return Some(EolSeparated::Scope(parse_scope(strip_curlys(tokens))))
         }
+
+        match tokens.first() {
+            Some(Token::Repeat) => return Some(EolSeparated::Keyword(parse_kwrd(tokens))),
+            _ => if let Some(line) = parse_line(tokens) {
+                return Some(EolSeparated::Line(line));
+            },
+        };
         None
     };
 
-    let mut scope: Vec<LineOrScope> = Vec::new();
+    let mut scope: Vec<EolSeparated> = Vec::new();
     let line_endings = find_posible_splits(tokens);
     let zipped_line_endings = line_endings.windows(2);
 
     if let Some(p) = line_endings.first() {
-        if let Some(line) = parse_line_or_scope(&tokens[..*p]) {
+        if let Some(line) = parse_eol_separated(&tokens[..*p]) {
             scope.push(line);
         }
     }
 
     for w in zipped_line_endings {
         if let [b, e] = w {
-            if let Some(line) = parse_line_or_scope(&tokens[*b + 1..*e]) {
+            if let Some(line) = parse_eol_separated(&tokens[*b + 1..*e]) {
                 scope.push(line);
             }
         }
     }
 
     if let Some(p) = line_endings.last() {
-        if let Some(line) = parse_line_or_scope(&tokens[*p + 1..]) {
+        if let Some(line) = parse_eol_separated(&tokens[*p + 1..]) {
             scope.push(line);
         }
     }
@@ -231,18 +286,18 @@ fn pow(base: i64, exp: i64) -> i64 {
     res
 }
 
-fn eval(node: &ExpressionLike, stack: &Stack) -> i64 {
+fn exec_expr(node: &ExpressionLike, stack: &Stack) -> i64 {
     match node {
         ExpressionLike::Empty => 0,
         ExpressionLike::Val(num) => num.parse().unwrap(),
         ExpressionLike::Exp(node) => {
             match node.op.as_str() {
-                "+" => eval(&node.left, stack) + eval(&node.right, stack),
-                "-" => eval(&node.left, stack) - eval(&node.right, stack),
-                "*" => eval(&node.left, stack) * eval(&node.right, stack),
-                "/" => eval(&node.left, stack) / eval(&node.right, stack),
-                "%" => eval(&node.left, stack) % eval(&node.right, stack),
-                "**" => pow(eval(&node.left, stack), eval(&node.right, stack)),
+                "+" => exec_expr(&node.left, stack) + exec_expr(&node.right, stack),
+                "-" => exec_expr(&node.left, stack) - exec_expr(&node.right, stack),
+                "*" => exec_expr(&node.left, stack) * exec_expr(&node.right, stack),
+                "/" => exec_expr(&node.left, stack) / exec_expr(&node.right, stack),
+                "%" => exec_expr(&node.left, stack) % exec_expr(&node.right, stack),
+                "**" => pow(exec_expr(&node.left, stack), exec_expr(&node.right, stack)),
                 _ => panic!("Unknown operator({})", node.op),
             }
         }
@@ -256,14 +311,24 @@ fn eval(node: &ExpressionLike, stack: &Stack) -> i64 {
 }
 
 pub fn exec(ast: &AST) {
+    fn exec_keyword(kwrd: &Keyword, stack: &mut Stack) {
+        match kwrd {
+            Keyword::Repeat(repeat) => {
+                for _ in 0..exec_expr(&repeat.count, stack) {
+                    exec_scope(&repeat.scope, stack);
+                }
+            }
+        }
+    }
+
     fn exec_line(line: &Line, stack: &mut Stack) {
         match line {
             Line::Statement(stmt) => {
-                let value = eval(&stmt.exp, stack);
+                let value = exec_expr(&stmt.exp, stack);
                 stack.insert(stmt.var.clone(), value);
             }
             Line::Expression(exp) => {
-                let value = eval(exp, stack);
+                let value = exec_expr(exp, stack);
                 println!("{value}");
             }
         }
@@ -281,8 +346,9 @@ pub fn exec(ast: &AST) {
     fn exec_scope(scope: &Scope, stack: &mut Stack) {
         for inner in &scope.inner {
             match inner {
-                LineOrScope::Line(line) => exec_line(line, stack),
-                LineOrScope::Scope(scope) => {
+                EolSeparated::Line(line) => exec_line(line, stack),
+                EolSeparated::Keyword(kwrd) => exec_keyword(kwrd, stack),
+                EolSeparated::Scope(scope) => {
                     let mut local_stack = stack.clone();
                     exec_scope(scope, &mut local_stack);
                     stack_copy(&local_stack, stack);
