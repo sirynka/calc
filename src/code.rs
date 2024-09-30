@@ -132,7 +132,6 @@ fn parse_exp(tokens: &[Token]) -> ExpressionLike {
 
     let parse_as_val = || {
         match tokens.len() {
-            0 => return ExpressionLike::Empty,
             1 => return {
                 match &tokens[0] {
                     Token::Literal(num) => ExpressionLike::Val(num.clone()),
@@ -143,7 +142,7 @@ fn parse_exp(tokens: &[Token]) -> ExpressionLike {
             _ => {
                 if wrapped_in_parens(tokens) { return parse_exp(strip_parens(tokens)); }
                 panic!("\n{}{}{}{}\n",
-                    "Failed to parse tokens into the ast.\n",
+                    "Encountered unexpected token when parsing expression\n",
                     "The list of tokens does not contain any operators,\n",
                     "those it should only contain a single token, tokens wrapped in parens or noting\n",
                     format!("Found {tokens:?}")
@@ -173,8 +172,8 @@ fn parse_exp(tokens: &[Token]) -> ExpressionLike {
 
 fn parse_stmt(tokens: &[Token]) -> Statement {
     if tokens[1] != Token::Equal {
-        panic!("\n{}\n{}\n",
-            "Statements can not contain anything but '=' as tok[1]",
+        panic!("\n{}{}\n",
+            "Statements can not contain anything but '=' as tok[1]\n",
             format!("Found {tokens:?}")
         );
     }
@@ -191,9 +190,9 @@ fn parse_stmt(tokens: &[Token]) -> Statement {
 
 fn parse_kwrd(tokens: &[Token]) -> Keyword {
     let parse_repeat = || -> Repeat {
-        let msg = format!("\n{}\n{}\n{}\n",
-            "Encountered unexpected token when parsing `repeat`",
-            "Usage: repeat(<expression>) { <scope> }",
+        let msg = format!("\n{}{}{}\n",
+            "Encountered unexpected token when parsing `repeat`\n",
+            "Usage: repeat(<expression>) { <scope> }\n",
             format!("Found {tokens:?}")
         );
 
@@ -288,7 +287,6 @@ fn pow(base: i64, exp: i64) -> i64 {
 
 fn exec_expr(node: &ExpressionLike, stack: &Stack) -> i64 {
     match node {
-        ExpressionLike::Empty => 0,
         ExpressionLike::Val(num) => num.parse().unwrap(),
         ExpressionLike::Exp(node) => {
             match node.op.as_str() {

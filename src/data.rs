@@ -41,7 +41,6 @@ pub enum ExpressionLike {
     Var(String),
     Val(String),
     Exp(Box<BinaryOp>),
-    Empty,
 }
 
 #[derive(Debug, PartialEq)]

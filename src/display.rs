@@ -11,7 +11,6 @@ const SPACES: &str = "    ";
 impl std::fmt::Display for ExpressionLike {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            ExpressionLike::Empty => write!(f, "0"),
             ExpressionLike::Var(var) => write!(f, "{var}"),
             ExpressionLike::Val(num) => write!(f, "{num}"),
             ExpressionLike::Exp(node) => write!(f, "({} {} {})", node.left, node.op, node.right),

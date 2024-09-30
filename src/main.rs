@@ -2,7 +2,11 @@ mod display;
 mod data;
 mod code;
 
-use code::{exec, parse, tokenize};
+use code::{
+    tokenize,
+    parse,
+    exec,
+};
 
 fn main() {
     let program = "
@@ -20,6 +24,6 @@ fn main() {
     let tokens = tokenize(&program);
     let ast = parse(&tokens);
     // println!("{tokens:?}");
-    // println!("{ast}");
+    println!("{ast}");
     exec(&ast);
 }
