@@ -1,10 +1,12 @@
 use crate::data::{
     ExpressionLike,
+    LineOrScope,
     Statement,
     BinaryOp,
     Scope,
     Stack,
     Token,
+    Line,
     AST,
 };
 
@@ -47,22 +49,47 @@ pub fn tokenize(s: &str) -> Vec<Token> {
     tokens
 }
 
+fn wrapped_in(tokens: &[Token], open: Token, close: Token) -> bool {
+    tokens.len() > 2 && tokens[0] == open && tokens[tokens.len() - 1] == close
+}
+
+fn strip_wrapping(tokens: &[Token], open: Token, close: Token) -> &[Token] {
+    let mut tokens = tokens;
+    while let (Some(_), Some(_)) = (
+        tokens.strip_prefix(&[open.clone()]),
+        tokens.strip_suffix(&[close.clone()])
+    ) {
+        tokens = &tokens[1..tokens.len() - 1];
+    }
+    tokens
+}
+
+fn find_splits(tokens: &[Token], open: Token, close: Token, f: fn(&Token) -> bool) -> Vec<usize> {
+    let mut count = 0;
+    let mut splits = Vec::new();
+    for (i, token) in tokens.iter().enumerate() {
+        match token {
+            o if *o == open => count += 1,
+            c if *c == close => count -= 1,
+            _ if count == 0 && f(token) => splits.push(i),
+            _ => {},
+        }
+    }
+    splits
+}
+
 fn parse_exp(tokens: &[Token]) -> ExpressionLike {
     let op_precedence = ["-", "+", "*", "/", "%", "**"];
 
     let wrapped_in_parens = |tokens: &[Token]| -> bool {
-        tokens.len() > 2 && tokens[0] == Token::OpenParen && tokens[tokens.len() - 1] == Token::ClosedParen
+        wrapped_in(tokens, Token::OpenParen, Token::ClosedParen)
     };
 
     fn strip_parens(tokens: &[Token]) -> &[Token] {
-        let mut tokens = tokens;
-        while let (Some(_), Some(_)) = (tokens.strip_prefix(&[Token::OpenParen]), tokens.strip_suffix(&[Token::ClosedParen])) {
-            tokens = &tokens[1..tokens.len() - 1];
-        }
-        tokens
+        strip_wrapping(tokens, Token::OpenParen, Token::ClosedParen)
     }
 
-    let parse_tokens_as_exp = |op_idx: usize| {
+    let parse_as_exp = |op_idx: usize| {
         let Token::Op(op) = tokens[op_idx].clone() else { unreachable!(); };
 
         ExpressionLike::Exp(
@@ -76,7 +103,7 @@ fn parse_exp(tokens: &[Token]) -> ExpressionLike {
         )
     };
 
-    let parse_tokens_as_val = || {
+    let parse_as_val = || {
         match tokens.len() {
             0 => return ExpressionLike::Empty,
             1 => return {
@@ -99,17 +126,7 @@ fn parse_exp(tokens: &[Token]) -> ExpressionLike {
     };
 
     let find_posible_splits = |tokens: &[Token]| -> Vec<usize> {
-        let mut count = 0;
-        let mut splits = Vec::new();
-        for (i, token) in tokens.iter().enumerate() {
-            match token {
-                Token::OpenParen => count += 1,
-                Token::ClosedParen => count -= 1,
-                Token::Op(_) => if count == 0 { splits.push(i); },
-                _ => {}
-            }
-        }
-        splits
+        find_splits(tokens, Token::OpenParen, Token::ClosedParen, |_| true)
     };
 
     let pick_split = |splits: &[usize]| -> Option<usize> {
@@ -122,8 +139,8 @@ fn parse_exp(tokens: &[Token]) -> ExpressionLike {
     let possible_splits = find_posible_splits(tokens);
     let split_pos = pick_split(&possible_splits);
     match split_pos {
-        Some(op_idx) => parse_tokens_as_exp(op_idx),
-        None => parse_tokens_as_val(),
+        Some(op_idx) => parse_as_exp(op_idx),
+        None => parse_as_val(),
     }
 }
 
@@ -145,66 +162,63 @@ fn parse_stmt(tokens: &[Token]) -> Statement {
     }
 }
 
-// fn parse_lines(tokens: &[Token]) -> AST {
-//     let mut eol_pos: Vec<usize> = Vec::new();
-//     for (i, token) in tokens.iter().enumerate() {
-//         if let Token::EndOfLine = token { eol_pos.push(i); }
-//     }
-
-//     let parse_line = |b: usize, e: usize| -> Option<Line> {
-//         if b == e { return None; }
-//         let line = &tokens[b..e];
-//         match line.contains(&Token::Equal) {
-//             true => Some(Line::Statement(parse_stmt(line))),
-//             false => Some(Line::Expression(parse_exp(line))),
-//         }
-//     };
-
-//     let mut lines: Vec<Line> = Vec::new();
-
-//     if let Some(p) = eol_pos.first() {
-//         if let Some(line) = parse_line(0, *p) {
-//             lines.push(line);
-//         }
-//     }
-
-//     for w in eol_pos.windows(2) {
-//         if let [b, e] = w {
-//             if let Some(line) = parse_line(*b + 1, *e) {
-//                 lines.push(line);
-//             }
-//         }
-//     }
-
-//     if let Some(p) = eol_pos.last() {
-//         if let Some(line) = parse_line(*p + 1, tokens.len()) {
-//             lines.push(line);
-//         }
-//     }
-
-//     AST::Lines(lines)
-// }
-
 fn parse_scope(tokens: &[Token]) -> Scope {
 
     let find_posible_splits = |tokens: &[Token]| -> Vec<usize> {
-        let mut count = 0;
-        let mut splits = Vec::new();
-        for (i, token) in tokens.iter().enumerate() {
-            match token {
-                Token::OpenCurly => count += 1,
-                Token::ClosedCurly => count -= 1,
-                _ => if count == 0 && *token == Token::EndOfLine { splits.push(i); },
-            }
-        }
-        splits
+        find_splits(tokens, Token::OpenCurly, Token::ClosedCurly, |tok| tok == &Token::EndOfLine)
     };
 
+    let wrapped_in_curlys = |tokens: &[Token]| -> bool {
+        wrapped_in(tokens, Token::OpenCurly, Token::ClosedCurly)
+    };
 
+    fn strip_curlys(tokens: &[Token]) -> &[Token] {
+        strip_wrapping(tokens, Token::OpenCurly, Token::ClosedCurly)
+    }
+
+    let parse_line = |line: &[Token]| -> Option<Line> {
+        if line.is_empty() { return None; }
+        match line.contains(&Token::Equal) {
+            true => Some(Line::Statement(parse_stmt(line))),
+            false => Some(Line::Expression(parse_exp(line))),
+        }
+    };
+
+    let parse_line_or_scope = |tokens: &[Token]| -> Option<LineOrScope> {
+        match wrapped_in_curlys(tokens) {
+            true => return Some(LineOrScope::Scope(parse_scope(strip_curlys(tokens)))),
+            false => if let Some(line) = parse_line(tokens) {
+                return Some(LineOrScope::Line(line));
+            },
+        }
+        None
+    };
+
+    let mut scope: Vec<LineOrScope> = Vec::new();
     let line_endings = find_posible_splits(tokens);
-    dbg!(line_endings);
+    let zipped_line_endings = line_endings.windows(2);
 
-    unimplemented!();
+    if let Some(p) = line_endings.first() {
+        if let Some(line) = parse_line_or_scope(&tokens[..*p]) {
+            scope.push(line);
+        }
+    }
+
+    for w in zipped_line_endings {
+        if let [b, e] = w {
+            if let Some(line) = parse_line_or_scope(&tokens[*b + 1..*e]) {
+                scope.push(line);
+            }
+        }
+    }
+
+    if let Some(p) = line_endings.last() {
+        if let Some(line) = parse_line_or_scope(&tokens[*p + 1..]) {
+            scope.push(line);
+        }
+    }
+
+    Scope { inner: scope }
 }
 
 pub fn parse(tokens: &[Token]) -> AST {
@@ -242,19 +256,42 @@ fn eval(node: &ExpressionLike, stack: &Stack) -> i64 {
 }
 
 pub fn exec(ast: &AST) {
-    unimplemented!()
-    // let mut stack = Stack::new();
-    // let AST::Lines(lines) = ast;
-    // for line in lines {
-    //     match line {
-    //         Line::Statement(stmt) => {
-    //             let value = eval(&stmt.exp, &stack);
-    //             stack.insert(stmt.var.as_str(), value);
-    //         }
-    //         Line::Expression(exp) => {
-    //             let value = eval(exp, &stack);
-    //             println!("{value}");
-    //         }
-    //     }
-    // }
+    fn exec_line(line: &Line, stack: &mut Stack) {
+        match line {
+            Line::Statement(stmt) => {
+                let value = eval(&stmt.exp, stack);
+                stack.insert(stmt.var.clone(), value);
+            }
+            Line::Expression(exp) => {
+                let value = eval(exp, stack);
+                println!("{value}");
+            }
+        }
+    }
+
+    fn stack_copy(local_stack: &Stack, stack: &mut Stack) {
+        for (var, val) in stack.iter_mut() {
+            let local_val = local_stack.get(var.as_str());
+            if let Some(local_val) = local_val {
+                *val = *local_val;
+            }
+        }
+    }
+
+    fn exec_scope(scope: &Scope, stack: &mut Stack) {
+        for inner in &scope.inner {
+            match inner {
+                LineOrScope::Line(line) => exec_line(line, stack),
+                LineOrScope::Scope(scope) => {
+                    let mut local_stack = stack.clone();
+                    exec_scope(scope, &mut local_stack);
+                    stack_copy(&local_stack, stack);
+                },
+            }
+        }
+    }
+
+    let mut stack = Stack::new();
+    let AST::Scope(scope) = ast;
+    exec_scope(scope, &mut stack);
 }

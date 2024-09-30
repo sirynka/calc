@@ -1,4 +1,4 @@
-pub type Stack<'a> = std::collections::HashMap<&'a str, i64>;
+pub type Stack<'a> = std::collections::HashMap<String, i64>;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Token {
@@ -17,11 +17,13 @@ pub enum AST {
     Scope(Scope)
 }
 
+#[derive(Debug)]
 pub enum LineOrScope {
     Line(Line),
     Scope(Scope),
 }
 
+#[derive(Debug)]
 pub enum Line {
     Statement(Statement),
     Expression(ExpressionLike),
@@ -42,11 +44,13 @@ pub struct BinaryOp {
     pub right: ExpressionLike,
 }
 
+#[derive(Debug)]
 pub struct Statement {
     pub var: String,
     pub exp: ExpressionLike,
 }
 
+#[derive(Debug)]
 pub struct Scope {
     pub inner: Vec<LineOrScope>,
 }

@@ -29,10 +29,24 @@ impl std::fmt::Display for Line {
 impl std::fmt::Display for Scope {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         writeln!(f, "{{")?;
-        for line_or_scope in &self.inner {
-            write!(f,  "{line_or_scope}\n")?;
+        for inner in &self.inner {
+            write_with_indent(f, inner, 1)?;
         }
         writeln!(f, "}}")
+    }
+}
+
+fn write_with_indent(f: &mut std::fmt::Formatter, line_or_scope: &LineOrScope, indent: usize) -> std::fmt::Result {
+    let spaces = "    ".repeat(indent);
+    match line_or_scope {
+        LineOrScope::Line(line) => writeln!(f, "{spaces}{line}"),
+        LineOrScope::Scope(scope) => {
+            writeln!(f, "{spaces}{{")?;
+            for line_or_scope in &scope.inner {
+                write_with_indent(f, line_or_scope, indent + 1)?;
+            }
+            writeln!(f, "{spaces}}}")
+        }
     }
 }
 
