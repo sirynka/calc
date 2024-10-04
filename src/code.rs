@@ -392,6 +392,17 @@ pub fn exec(ast: &AST) {
                 *val = *local_val;
             }
         }
+
+        // a hack to copy 'array' to upper scope
+        let mut array_values = Stack::new();
+        for var in stack.keys() {
+            for (local_var, local_val) in local_stack {
+                if local_var.starts_with(var) {
+                    array_values.insert(local_var.to_string(), *local_val);
+                }
+            }
+        }
+        stack.extend(array_values);
     }
 
     fn exec_scope(scope: &Scope, stack: &mut Stack) {

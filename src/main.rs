@@ -10,15 +10,13 @@ use code::{
 
 fn main() {
     let program = "
+    a = 0
+    i = 0
 
-    i = 0;
-
-    a.i = i; i = i + 1
-    a.i = i; i = i + 1
-    a.i = i; i = i + 1
-    a.i = i; i = i + 1
-    a.i = i; i = i + 1
-    a.i = i; i = i + 1
+    repeat(10) {
+        a.i = i
+        i = i + 1
+    }
 
     stack
     ";
