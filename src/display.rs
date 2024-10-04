@@ -2,12 +2,23 @@ use crate::data::{
     ExpressionLike,
     EolSeparated,
     Keyword,
+    VarName,
     Scope,
     Line,
     AST,
 };
 
 const SPACES: &str = "    ";
+
+impl std::fmt::Display for VarName {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            VarName::Simple(name) => write!(f, "{name}"),
+            VarName::Indexable(name, idx) => write!(f, "{name}.{idx}"),
+        }
+    }
+}
+
 impl std::fmt::Display for ExpressionLike {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {

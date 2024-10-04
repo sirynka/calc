@@ -3,6 +3,7 @@ use crate::data::{
     EolSeparated,
     Statement,
     BinaryOp,
+    VarName,
     Keyword,
     Repeat,
     Scope,
@@ -41,6 +42,7 @@ pub fn tokenize(s: &str) -> Vec<Token> {
             '{' => { if let Some(_) = chars.next() { tokens.push(Token::OpenCurly) } }
             '}' => { if let Some(_) = chars.next() { tokens.push(Token::ClosedCurly) } }
             '=' => { if let Some(_) = chars.next() { tokens.push(Token::Equal) } }
+            '.' => { if let Some(_) = chars.next() { tokens.push(Token::Dot) } }
             '\n' | ';' => { if let Some(_) = chars.next() { tokens.push(Token::EndOfLine) } }
             '*' => {
                 chars.next();
@@ -117,11 +119,24 @@ fn find_closing(tokens: &[Token], open: Token, close: Token) -> usize {
     panic!("Failed to find closing paren in {tokens:?}")
 }
 
+fn parse_var_name(tokens: &[Token]) -> VarName {
+    let Token::Variable(name) = &tokens[0] else { unreachable!() };
+    let name = name.to_string();
+
+    match tokens.iter().position(|t| t == &Token::Dot) {
+        Some(dot) => VarName::Indexable(
+            /* name: */ name,
+            /* idx:  */ Box::new(parse_exp(&tokens[dot+1..]))
+        ),
+        None => VarName::Simple(name),
+    }
+}
+
 fn parse_exp(tokens: &[Token]) -> ExpressionLike {
     let op_precedence = ["-", "+", "*", "/", "%", "**"];
 
     let parse_as_exp = |op_idx: usize| {
-        let Token::Op(op) = tokens[op_idx].clone() else { unreachable!(); };
+        let Token::Op(op) = tokens[op_idx].clone() else { unreachable!() };
 
         ExpressionLike::Exp(
             Box::new(
@@ -135,23 +150,17 @@ fn parse_exp(tokens: &[Token]) -> ExpressionLike {
     };
 
     let parse_as_val = || {
-        match tokens.len() {
-            1 => return {
-                match &tokens[0] {
-                    Token::Literal(num) => ExpressionLike::Val(num.clone()),
-                    Token::Variable(var) => ExpressionLike::Var(var.clone()),
-                    _ => unreachable!(),
-                }
-            },
-            _ => {
-                if wrapped_in_parens(tokens) { return parse_exp(strip_parens(tokens)); }
-                panic!("\n{}{}{}{}\n",
-                    "Encountered unexpected token when parsing expression\n",
-                    "The list of tokens does not contain any operators,\n",
-                    "those it should only contain a single token, tokens wrapped in parens or noting\n",
-                    format!("Found {tokens:?}")
-                );
-            },
+        if wrapped_in_parens(tokens) { return parse_exp(strip_parens(tokens)); }
+
+        match &tokens[0] {
+            Token::Literal(num) => ExpressionLike::Val(num.clone()),
+            Token::Variable(_) => ExpressionLike::Var(parse_var_name(tokens)),
+            _ => panic!("\n{}{}{}{}\n",
+                "Encountered unexpected token when parsing expression\n",
+                "The list of tokens does not contain any operators,\n",
+                "those it should only contain a single token, tokens wrapped in parens or noting\n",
+                format!("Found {tokens:?}")
+            ),
         }
     };
 
@@ -175,20 +184,11 @@ fn parse_exp(tokens: &[Token]) -> ExpressionLike {
 }
 
 fn parse_stmt(tokens: &[Token]) -> Statement {
-    if tokens[1] != Token::Equal {
-        panic!("\n{}{}\n",
-            "Statements can not contain anything but '=' as tok[1]\n",
-            format!("Found {tokens:?}")
-        );
-    }
-
-    let Token::Variable(var) = &tokens[0] else {
-        panic!("Cannot assign {:?} to {:?}", tokens[0], &tokens[2..]);
-    };
+    let Some(equal) = tokens.iter().position(|t| t == &Token::Equal) else { unreachable!() };
 
     Statement {
-        var: var.clone(),
-        exp: parse_exp(&tokens[2..]),
+        var: parse_var_name(&tokens[..equal]),
+        exp: parse_exp(&tokens[equal+1..]),
     }
 }
 
@@ -331,7 +331,8 @@ fn exec_expr(node: &ExpressionLike, stack: &Stack) -> i64 {
             }
         }
         ExpressionLike::Var(var) => {
-            match stack.get(var.as_str()) {
+            let name = &format!("{var}");
+            match stack.get(name) {
                 Some(value) => *value,
                 None => panic!("Var({var}) was not on a Stack\n{stack:?}"),
             }
@@ -364,7 +365,14 @@ pub fn exec(ast: &AST) {
         match line {
             Line::Statement(stmt) => {
                 let value = exec_expr(&stmt.exp, stack);
-                stack.insert(stmt.var.clone(), value);
+                let name = match &stmt.var {
+                    VarName::Simple(name) => name.to_string(),
+                    VarName::Indexable(name, exp) => {
+                        let value = exec_expr(&exp, stack);
+                        format!("{name}.{value}")
+                    },
+                };
+                stack.insert(name, value);
             }
             Line::Expression(exp) => {
                 let value = exec_expr(exp, stack);

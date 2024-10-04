@@ -12,8 +12,9 @@ pub enum Token {
     Equal,
     EndOfLine,
     Repeat,
-    If,
     While,
+    If,
+    Dot,
 }
 
 pub enum AST {
@@ -42,7 +43,7 @@ pub enum Keyword {
 
 #[derive(Debug, PartialEq)]
 pub enum ExpressionLike {
-    Var(String),
+    Var(VarName),
     Val(String),
     Exp(Box<BinaryOp>),
 }
@@ -56,8 +57,14 @@ pub struct BinaryOp {
 
 #[derive(Debug)]
 pub struct Statement {
-    pub var: String,
+    pub var: VarName,
     pub exp: ExpressionLike,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum VarName {
+    Simple(String),
+    Indexable(String, Box<ExpressionLike>)
 }
 
 #[derive(Debug)]

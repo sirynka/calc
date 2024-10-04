@@ -10,13 +10,10 @@ use code::{
 
 fn main() {
     let program = "
-    a = 10
-    while (a) {
-        a = a - 1
-        if (a % 2) {
-            a
-        }
-    }
+        i = 1
+        a.i = 5
+
+        a.1
     ";
 
     let tokens = tokenize(&program);
