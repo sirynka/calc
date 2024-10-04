@@ -11,11 +11,10 @@ use code::{
 fn main() {
     let program = "
     a = 0
-    i = 0
 
     repeat(10) {
-        a.i = i
-        i = i + 1
+        a.a = a
+        a = a + 1
     }
 
     stack
