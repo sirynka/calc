@@ -28,6 +28,7 @@ pub fn tokenize(s: &str) -> Vec<Token> {
                     "repeat" => Token::Repeat,
                     "while" => Token::While,
                     "if" => Token::If,
+                    "stack" => Token::Stack,
                     _ => Token::Variable(token),
                 });
             }
@@ -237,6 +238,7 @@ fn parse_kwrd(tokens: &[Token]) -> Keyword {
         Token::Repeat => Keyword::Repeat(parse_repeat()),
         Token::While => Keyword::While(parse_while()),
         Token::If => Keyword::If(parse_if()),
+        Token::Stack => Keyword::Stack,
         other => panic!("Unknown keyword({other:?})"),
     }
 }
@@ -262,6 +264,7 @@ fn parse_scope(tokens: &[Token]) -> Scope {
 
         match tokens.first() {
             Some(
+                Token::Stack |
                 Token::Repeat |
                 Token::While |
                 Token::If
@@ -358,6 +361,7 @@ pub fn exec(ast: &AST) {
                     exec_scope(&iff.scope, stack);
                 }
             }
+            Keyword::Stack => println!("{stack:#?}"),
         }
     }
 

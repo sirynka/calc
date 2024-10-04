@@ -15,6 +15,7 @@ pub enum Token {
     While,
     If,
     Dot,
+    Stack,
 }
 
 pub enum AST {
@@ -39,6 +40,7 @@ pub enum Keyword {
     Repeat(Repeat),
     While(While),
     If(If),
+    Stack,
 }
 
 #[derive(Debug, PartialEq)]

@@ -10,10 +10,17 @@ use code::{
 
 fn main() {
     let program = "
-        i = 1
-        a.i = 5
 
-        a.1
+    i = 0;
+
+    a.i = i; i = i + 1
+    a.i = i; i = i + 1
+    a.i = i; i = i + 1
+    a.i = i; i = i + 1
+    a.i = i; i = i + 1
+    a.i = i; i = i + 1
+
+    stack
     ";
 
     let tokens = tokenize(&program);

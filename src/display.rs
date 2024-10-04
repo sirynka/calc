@@ -50,6 +50,7 @@ fn write_keyword(f: &mut std::fmt::Formatter, keyword: &Keyword, indent: usize) 
         Keyword::Repeat(repeat) => write_keyword_template(f, "repeat", &repeat.count, &repeat.scope),
         Keyword::While(whhile) => write_keyword_template(f, "while", &whhile.condition, &whhile.scope),
         Keyword::If(iff) => write_keyword_template(f, "if", &iff.condition, &iff.scope),
+        Keyword::Stack => writeln!(f, "stack"),
     }
 }
 
