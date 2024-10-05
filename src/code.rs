@@ -129,7 +129,12 @@ fn parse_var_name(tokens: &[Token]) -> VarName {
             /* name: */ name,
             /* idx:  */ Box::new(parse_exp(&tokens[dot+1..]))
         ),
-        None => VarName::Simple(name),
+        None if tokens.len() == 1 => VarName::Simple(name),
+        None => panic!("\n{}{}{}\n",
+            "Encountered unexpected token when parsing variable name\n",
+            "Usage: <variable> or <variable>.<expression>\n",
+            format!("Found {tokens:?}")
+        )
     }
 }
 
@@ -154,12 +159,11 @@ fn parse_exp(tokens: &[Token]) -> ExpressionLike {
         if wrapped_in_parens(tokens) { return parse_exp(strip_parens(tokens)); }
 
         match &tokens[0] {
-            Token::Literal(num) => ExpressionLike::Val(num.clone()),
+            Token::Literal(num) if tokens.len() == 1 => ExpressionLike::Val(num.clone()),
             Token::Variable(_) => ExpressionLike::Var(parse_var_name(tokens)),
-            _ => panic!("\n{}{}{}{}\n",
-                "Encountered unexpected token when parsing expression\n",
-                "The list of tokens does not contain any operators,\n",
-                "those it should only contain a single token, tokens wrapped in parens or noting\n",
+            _ => panic!("\n{}{}{}\n",
+                "Encountered unexpected token when parsing an expression\n",
+                "Usage: <expression> <operator> <expression>\n",
                 format!("Found {tokens:?}")
             ),
         }
