@@ -3,6 +3,7 @@ use crate::data::{
     EolSeparated,
     Keyword,
     VarName,
+    Literal,
     Scope,
     Line,
     AST,
@@ -15,6 +16,15 @@ impl std::fmt::Display for VarName {
         match self {
             VarName::Simple(name) => write!(f, "{name}"),
             VarName::Indexable(name, idx) => write!(f, "{name}.{idx}"),
+        }
+    }
+}
+
+impl std::fmt::Display for Literal {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Literal::I64(num) => write!(f, "{num}"),
+            Literal::F64(num) => write!(f, "{num}"),
         }
     }
 }

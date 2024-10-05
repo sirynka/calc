@@ -1,4 +1,4 @@
-pub type Stack<'a> = std::collections::HashMap<String, i64>;
+pub type Stack<'a> = std::collections::HashMap<String, Literal>;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Token {
@@ -46,8 +46,14 @@ pub enum Keyword {
 #[derive(Debug, PartialEq)]
 pub enum ExpressionLike {
     Var(VarName),
-    Val(String),
+    Val(Literal),
     Exp(Box<BinaryOp>),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum Literal {
+    I64(i64),
+    F64(f64),
 }
 
 #[derive(Debug, PartialEq)]

@@ -4,6 +4,7 @@ use crate::data::{
     Statement,
     BinaryOp,
     VarName,
+    Literal,
     Keyword,
     Repeat,
     Scope,
@@ -138,6 +139,30 @@ fn parse_var_name(tokens: &[Token]) -> VarName {
     }
 }
 
+fn parse_literal(tokens: &[Token]) -> Literal {
+    match tokens.len() {
+        1 => {
+            let Token::Literal(num) = &tokens[0] else { unreachable!() };
+            let num: i64 = num.parse().unwrap();
+            Literal::I64(num)
+        },
+        3 => {
+            let Token::Literal(whole) = &tokens[0] else { unreachable!() };
+            let Token::Dot = &tokens[1] else { unreachable!() };
+            let Token::Literal(fraction) = &tokens[2] else { unreachable!() };
+
+            let num = format!("{whole}.{fraction}");
+            let num: f64 = num.parse().unwrap();
+            Literal::F64(num)
+        }
+        _ => panic!("\n{}{}{}\n",
+            "Encountered unexpected token when parsing a literal\n",
+            "Usage: <number> or <number>.<number>\n",
+            format!("Found {tokens:?}")
+        ),
+    }
+}
+
 fn parse_exp(tokens: &[Token]) -> ExpressionLike {
     let op_precedence = ["-", "+", "*", "/", "%", "**"];
 
@@ -159,7 +184,7 @@ fn parse_exp(tokens: &[Token]) -> ExpressionLike {
         if wrapped_in_parens(tokens) { return parse_exp(strip_parens(tokens)); }
 
         match &tokens[0] {
-            Token::Literal(num) if tokens.len() == 1 => ExpressionLike::Val(num.clone()),
+            Token::Literal(_) => ExpressionLike::Val(parse_literal(tokens)),
             Token::Variable(_) => ExpressionLike::Var(parse_var_name(tokens)),
             _ => panic!("\n{}{}{}\n",
                 "Encountered unexpected token when parsing an expression\n",
@@ -317,30 +342,24 @@ pub fn parse(tokens: &[Token]) -> AST {
     AST::Scope(parse_scope(tokens))
 }
 
-fn pow(base: i64, exp: i64) -> i64 {
-    let mut res = 1;
-    for _ in 0..exp { res *= base; }
-    res
-}
-
-fn exec_expr(node: &ExpressionLike, stack: &Stack) -> i64 {
+fn exec_expr(node: &ExpressionLike, stack: &Stack) -> Literal {
     match node {
-        ExpressionLike::Val(num) => num.parse().unwrap(),
+        ExpressionLike::Val(literal) => literal.clone(),
         ExpressionLike::Exp(node) => {
             match node.op.as_str() {
-                "+" => exec_expr(&node.left, stack) + exec_expr(&node.right, stack),
-                "-" => exec_expr(&node.left, stack) - exec_expr(&node.right, stack),
-                "*" => exec_expr(&node.left, stack) * exec_expr(&node.right, stack),
-                "/" => exec_expr(&node.left, stack) / exec_expr(&node.right, stack),
-                "%" => exec_expr(&node.left, stack) % exec_expr(&node.right, stack),
-                "**" => pow(exec_expr(&node.left, stack), exec_expr(&node.right, stack)),
+                "+"  => Literal::add(exec_expr(&node.left, stack), exec_expr(&node.right, stack)),
+                "-"  => Literal::sub(exec_expr(&node.left, stack), exec_expr(&node.right, stack)),
+                "*"  => Literal::mul(exec_expr(&node.left, stack), exec_expr(&node.right, stack)),
+                "/"  => Literal::div(exec_expr(&node.left, stack), exec_expr(&node.right, stack)),
+                "**" => Literal::pow(exec_expr(&node.left, stack), exec_expr(&node.right, stack)),
+                "%"  => Literal::modulo(exec_expr(&node.left, stack), exec_expr(&node.right, stack)),
                 _ => panic!("Unknown operator({})", node.op),
             }
         }
         ExpressionLike::Var(var) => {
             let name = &format!("{var}");
             match stack.get(name) {
-                Some(value) => *value,
+                Some(value) => value.clone(),
                 None => panic!("Var({var}) was not on a Stack\n{stack:?}"),
             }
         }
@@ -351,17 +370,17 @@ pub fn exec(ast: &AST) {
     fn exec_keyword(kwrd: &Keyword, stack: &mut Stack) {
         match kwrd {
             Keyword::Repeat(repeat) => {
-                for _ in 0..exec_expr(&repeat.count, stack) {
+                for _ in 0..exec_expr(&repeat.count, stack).as_i64() {
                     exec_scope(&repeat.scope, stack);
                 }
             }
             Keyword::While(whhile) => {
-                while exec_expr(&whhile.condition, stack) != 0 {
+                while exec_expr(&whhile.condition, stack).is_zero() {
                     exec_scope(&whhile.scope, stack);
                 }
             }
             Keyword::If(iff) => {
-                if exec_expr(&iff.condition, stack) != 0 {
+                if exec_expr(&iff.condition, stack).is_zero() {
                     exec_scope(&iff.scope, stack);
                 }
             }
@@ -389,24 +408,18 @@ pub fn exec(ast: &AST) {
         }
     }
 
-    fn stack_copy(local_stack: &Stack, stack: &mut Stack) {
-        for (var, val) in stack.iter_mut() {
-            let local_val = local_stack.get(var.as_str());
-            if let Some(local_val) = local_val {
-                *val = *local_val;
-            }
-        }
-
-        // a hack to copy 'array' to upper scope
-        let mut array_values = Stack::new();
-        for var in stack.keys() {
-            for (local_var, local_val) in local_stack {
-                if local_var.starts_with(var) {
-                    array_values.insert(local_var.to_string(), *local_val);
+    fn stack_copy(local_stack: Stack, stack: &mut Stack) {
+        for (var, val) in local_stack.into_iter() {
+            match var.split_once('.') {
+                // a hack to copy 'array' to outer scope
+                Some((prefix, _)) => if !stack.contains_key(prefix) {
+                    stack.insert(var, val);
+                }
+                None => if !stack.contains_key(&var) {
+                    stack.insert(var, val);
                 }
             }
         }
-        stack.extend(array_values);
     }
 
     fn exec_scope(scope: &Scope, stack: &mut Stack) {
@@ -417,7 +430,7 @@ pub fn exec(ast: &AST) {
                 EolSeparated::Scope(scope) => {
                     let mut local_stack = stack.clone();
                     exec_scope(scope, &mut local_stack);
-                    stack_copy(&local_stack, stack);
+                    stack_copy(local_stack, stack);
                 },
             }
         }

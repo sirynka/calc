@@ -1,6 +1,7 @@
 mod display;
 mod data;
 mod code;
+mod ops;
 
 use code::{
     tokenize,
@@ -9,17 +10,7 @@ use code::{
 };
 
 fn main() {
-    let program = "
-    a = 0
-
-    repeat(10) {
-        a.a = a
-        a = a + 1
-    }
-
-    stack
-    ";
-
+    let program = "1 + 2.1";
     let tokens = tokenize(&program);
     let ast = parse(&tokens);
     // println!("{tokens:?}");
